@@ -1,62 +1,113 @@
 
-# a. Data preparation
+# Import required libraries
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, Model
 import matplotlib.pyplot as plt
+import re
 
-text = "deep learning improves machine learning and deep neural networks"
-tokens = text.lower().split()
+# a. Data Preparation
 
+# Read text from file
+with open("corpus.txt", "r", encoding="utf-8") as file:
+    text = file.read()
+
+# Convert text into lowercase and tokenize
+tokens = re.findall(r"\b[a-zA-Z]+\b", text.lower())
+
+# Create vocabulary
 vocab = sorted(set(tokens))
+
+# Create word-to-ID and ID-to-word mappings
 word_to_id = {w: i for i, w in enumerate(vocab)}
 id_to_word = {i: w for w, i in word_to_id.items()}
 
-# b. Generate training data
-window_size = 2
+print("Vocabulary:", vocab)
+print("Vocabulary Size:", len(vocab))
+
+
+# b. Generate Training Data
+
+window_size = 4
 X, y = [], []
 
 for i, word in enumerate(tokens):
+
+    # Get surrounding context words
     context = [
         tokens[j]
-        for j in range(max(0, i-window_size),
-                       min(len(tokens), i+window_size+1))
+        for j in range(
+            max(0, i - window_size),
+            min(len(tokens), i + window_size + 1)
+        )
         if j != i
     ]
 
+    # Convert context words into IDs
     X.append([word_to_id[w] for w in context])
+
+    # Target word ID
     y.append(word_to_id[word])
 
+# Pad sequences to make equal input lengths
 X = tf.keras.preprocessing.sequence.pad_sequences(
     X, padding="post"
 )
+
 y = np.array(y)
 
-# c. Build and train CBOW model
+print("\nTraining Samples:", len(X))
+print("Input Shape:", X.shape)
+print("Output Shape:", y.shape)
+
+
+# c. Build and Train CBOW Model
+
 embedding_dim = 10
 
+# Input layer
 inputs = layers.Input(shape=(X.shape[1],))
-embedding = layers.Embedding(len(vocab), embedding_dim)(inputs)
-average = layers.GlobalAveragePooling1D()(embedding)
-outputs = layers.Dense(len(vocab), activation="softmax")(average)
 
+# Embedding layer
+embedding = layers.Embedding(
+    input_dim=len(vocab),
+    output_dim=embedding_dim
+)(inputs)
+
+# Average context word embeddings
+average = layers.GlobalAveragePooling1D()(embedding)
+
+# Predict target word
+outputs = layers.Dense(
+    len(vocab),
+    activation="softmax"
+)(average)
+
+# Create model
 model = Model(inputs, outputs)
 
+# Compile model
 model.compile(
     optimizer="adam",
     loss="sparse_categorical_crossentropy",
     metrics=["accuracy"]
 )
 
-history = model.fit(X, y, epochs=100, verbose=0)
+# Train model
+history = model.fit(
+    X, y,
+    epochs=100,
+    verbose=0
+)
 
-# d. Display output
+print("\nModel Training Completed!")
+
+
+# d. Display Word Embeddings
+
 embeddings = model.layers[1].get_weights()[0]
 
-print("Vocabulary:", vocab)
-print("Training samples:", len(X))
-print("Model training completed.")
-print("Embedding shape:", embeddings.shape)
+print("\nEmbedding Shape:", embeddings.shape)
 
 # Plot training loss and accuracy
 fig, axes = plt.subplots(1, 2, figsize=(11, 4))
@@ -74,34 +125,40 @@ axes[1].set_ylabel("Accuracy")
 plt.tight_layout()
 plt.show()
 
-# Plot learned word embeddings
-plt.figure(figsize=(10, 4))
+
+# Visualize learned word embeddings
+plt.figure(figsize=(20, 40))
+
 plt.imshow(embeddings, aspect="auto", cmap="viridis")
 plt.colorbar(label="Embedding Value")
-plt.xticks(range(embedding_dim),
-           [f"Dim{i+1}" for i in range(embedding_dim)])
+
+plt.xticks(
+    range(embedding_dim),
+    [f"Dim{i+1}" for i in range(embedding_dim)]
+)
+
 plt.yticks(range(len(vocab)), vocab)
+
 plt.xlabel("Embedding Dimension")
-plt.ylabel("Word")
+plt.ylabel("Words")
 plt.title("Learned Word Embeddings")
+
 plt.tight_layout()
 plt.show()
 
 
+# e. Predict Target Word Using Context
 
-
-
-
-
-# Check CBOW prediction
-context_words = ["neural", "networks"]
+context_words = ["artificial", "that"]
 
 # Convert context words into IDs
 context_ids = [word_to_id[w] for w in context_words]
 
-# Pad input to the required sequence length
+# Pad context input
 context_ids = tf.keras.preprocessing.sequence.pad_sequences(
-    [context_ids], maxlen=X.shape[1], padding="post"
+    [context_ids],
+    maxlen=X.shape[1],
+    padding="post"
 )
 
 # Predict target word
@@ -110,6 +167,6 @@ prediction = model.predict(context_ids, verbose=0)
 predicted_id = np.argmax(prediction)
 predicted_word = id_to_word[predicted_id]
 
-print("Context Words:", context_words)
+print("\nContext Words:", context_words)
 print("Predicted Word:", predicted_word)
 print("Prediction Probabilities:", prediction)
